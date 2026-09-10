@@ -559,7 +559,7 @@ function buildInlineReviewForm({ user, productId, productName, productImg, slug,
   const textId    = `prf-rv-text-${productId}`;
  
   const imgHtml = productImg
-    ? `<img src="${productImg}" alt="${productName}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;flex-shrink:0;">`
+    ? `<img src="${productImg}" alt="${productName}" loading="lazy" decoding="async" style="width:56px;height:56px;object-fit:cover;border-radius:8px;flex-shrink:0;">`
     : `<div style="width:56px;height:56px;border-radius:8px;background:var(--clr-surface-2);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="fa-solid fa-box" style="color:var(--clr-text-3)"></i></div>`;
  
   const starInputHtml = [1,2,3,4,5].map(n => `
@@ -742,7 +742,7 @@ async function renderMyReviews(user) {
   if (pendingItems.length) {
     const itemsHtml = pendingItems.map(item => {
       const imgHtml = item.img
-        ? `<img src="${item.img}" alt="${item.productName}" style="width:52px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0;">`
+        ? `<img src="${item.img}" alt="${item.productName}" loading="lazy" decoding="async" style="width:52px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0;">`
         : `<div style="width:52px;height:52px;border-radius:8px;background:var(--clr-surface-2);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="fa-solid fa-box" style="color:var(--clr-text-3)"></i></div>`;
       return `
         <div class="pending-review-item" id="prf-item-${item.productId}">

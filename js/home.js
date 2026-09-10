@@ -1,7 +1,7 @@
 /* ============================================================
    MANARIZE — HOME PAGE
    ============================================================ */
-import { withLoader, hideLoader } from './loader.js';
+import { withLoader } from './loader.js';
 import { injectLayout } from './layout.js';
 import { getProducts, getCategories, getSiteSettings, saveNewsletterSubscriber } from './store-adapter.js';
 import { getAllReviews, getAllReviewsFlat } from './reviews.js';
@@ -19,9 +19,10 @@ import { LS, SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 withLoader(async () => {
   await injectLayout({ activePage: 'Home' });
 
-  // ── Reveal page immediately — skeletons show while data loads ─
-  // FCP fires now, before any Supabase fetch.
-  hideLoader();
+  // ── Loader stays up until the hero image has actually painted ─
+  // (previously we hid the loader here and let the hero image pop
+  // in later; now withLoader's finally-block hideLoader() only
+  // fires once initHeroRotation's returned promise below resolves)
 
   // Pre-fill grids with skeleton cards
   ['featured-products', 'new-arrivals'].forEach(id => {
@@ -47,7 +48,11 @@ withLoader(async () => {
   // ── Fill above-fold sections once data arrives ────────────────
   renderCategories(_allCategories);
   renderFeatured(_allProducts);
-  initHeroRotation(_allProducts);
+
+  // Wait for the hero image itself to finish loading (or fail, or
+  // time out) before letting withLoader reveal the page — this is
+  // the part the loader is meant to gate on.
+  await initHeroRotation(_allProducts);
 
   // ── Defer below-fold until browser is idle ────────────────────
   const idle = window.requestIdleCallback
@@ -98,44 +103,66 @@ function renderNewArrivals(products) {
 }
 
 // ── Hero product rotation ─────────────────────────────────────
+// Returns a promise that resolves once the FIRST hero image has
+// either loaded, errored, or hit a safety timeout — so the caller
+// (the page loader) can wait for the hero image to actually be
+// visible before revealing the page. Subsequent rotations after
+// the first one don't block anything.
 function initHeroRotation(products) {
-  const active = (products || []).filter(p => p.active !== false && p.images?.length);
-  if (!active.length) return;
+  return new Promise((resolve) => {
+    const active = (products || []).filter(p => p.active !== false && p.images?.length);
+    const imgEl = document.getElementById('hero-product-img');
+    const nameEl = document.getElementById('hero-badge-name');
+    const priceEl = document.getElementById('hero-badge-price');
 
-  // Prefer featured products, but fall back to all active products with images
-  const pool = active.filter(p => p.featured).length >= 2
-    ? active.filter(p => p.featured)
-    : active;
+    if (!active.length || !imgEl) { resolve(); return; }
 
-  let idx = 0;
-  const imgEl = document.getElementById('hero-product-img');
-  const nameEl = document.getElementById('hero-badge-name');
-  const priceEl = document.getElementById('hero-badge-price');
-  if (!imgEl) return;
+    // Prefer featured products, but fall back to all active products with images
+    const pool = active.filter(p => p.featured).length >= 2
+      ? active.filter(p => p.featured)
+      : active;
 
-  // ── Immediately show the first Supabase product ──
-  const setProduct = (p) => {
-    imgEl.src = p.images?.[0] || '';
-    imgEl.alt = p.name || 'Product';
-    imgEl.style.opacity = '1';
-    if (nameEl) nameEl.textContent = p.name;
-    if (priceEl) priceEl.textContent = formatPrice(p.price);
-  };
-  setProduct(pool[0]);
+    let idx = 0;
+    let settled = false;
+    const settle = () => { if (!settled) { settled = true; resolve(); } };
 
-  // ── Don't rotate if only one product ──
-  if (pool.length < 2) return;
+    // Never let a slow/broken hero image block the page forever —
+    // matches withLoader's own 3s safety net (loader.js).
+    const safetyTimer = setTimeout(settle, 2500);
 
-  const update = () => {
-    idx = (idx + 1) % pool.length;
-    const p = pool[idx];
+    const setProduct = (p, { waitForLoad = false } = {}) => {
+      imgEl.alt = p.name || 'Product';
+      if (nameEl) nameEl.textContent = p.name;
+      if (priceEl) priceEl.textContent = formatPrice(p.price);
 
-    // Fade out → swap src → fade in
-    imgEl.style.opacity = '0';
-    setTimeout(() => setProduct(p), 400);
-  };
+      if (waitForLoad) {
+        const onSettled = () => { clearTimeout(safetyTimer); imgEl.style.opacity = '1'; settle(); };
+        imgEl.addEventListener('load', onSettled, { once: true });
+        imgEl.addEventListener('error', onSettled, { once: true });
+        imgEl.src = p.images?.[0] || '';
+      } else {
+        imgEl.src = p.images?.[0] || '';
+        imgEl.style.opacity = '1';
+      }
+    };
 
-  setInterval(update, 5000);
+    // ── Show the first product, and gate on it actually loading ──
+    setProduct(pool[0], { waitForLoad: true });
+
+    // ── Don't rotate if only one product ──
+    if (pool.length < 2) return;
+
+    const update = () => {
+      idx = (idx + 1) % pool.length;
+      const p = pool[idx];
+
+      // Fade out → swap src → fade in
+      imgEl.style.opacity = '0';
+      setTimeout(() => setProduct(p), 400);
+    };
+
+    setInterval(update, 5000);
+  });
 }
 
 // ── Countdown Timer ───────────────────────────────────────────

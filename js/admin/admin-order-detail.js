@@ -210,7 +210,7 @@ function renderOrderDetail() {
         const isImage = o.paymentSlip.startsWith('data:image') ||
           /\.(jpg|jpeg|png|webp)(\?|$)/i.test(o.paymentSlip);
         slipMedia = isImage
-          ? `<img src="${o.paymentSlip}" style="max-height:200px;border-radius:8px;border:1px solid var(--clr-border);display:block">`
+          ? `<img src="${o.paymentSlip}" loading="lazy" decoding="async" style="max-height:200px;border-radius:8px;border:1px solid var(--clr-border);display:block">`
           : `<div style="display:flex;align-items:center;gap:.75rem;padding:1rem;background:var(--clr-bg-2);border-radius:8px;border:1px solid var(--clr-border);color:var(--clr-text-2)">
                <i class="fa-solid fa-file-pdf" style="color:var(--clr-error);font-size:2rem"></i>
                <div style="font-size:.875rem">PDF Slip attached</div>
