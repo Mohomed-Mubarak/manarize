@@ -4,44 +4,34 @@
   "outputDirectory": ".",
   "functions": {
     "api/health.js": {
-      "maxDuration": 5,
-      "memory": 128
+      "maxDuration": 5
     },
     "api/verify-captcha.js": {
-      "maxDuration": 8,
-      "memory": 128
+      "maxDuration": 8
     },
     "api/reviews.js": {
-      "maxDuration": 10,
-      "memory": 256
+      "maxDuration": 10
     },
     "api/whatsapp.js": {
-      "maxDuration": 10,
-      "memory": 128
+      "maxDuration": 10
     },
     "api/orders.js": {
-      "maxDuration": 15,
-      "memory": 256
+      "maxDuration": 15
     },
     "api/payhere-webhook.js": {
-      "maxDuration": 15,
-      "memory": 256
+      "maxDuration": 15
     },
     "api/auth/session.js": {
-      "maxDuration": 10,
-      "memory": 128
+      "maxDuration": 10
     },
     "api/auth/profile.js": {
-      "maxDuration": 10,
-      "memory": 128
+      "maxDuration": 10
     },
     "api/admin/[...action].js": {
-      "maxDuration": 30,
-      "memory": 512
+      "maxDuration": 30
     },
     "api/**/*.js": {
-      "maxDuration": 15,
-      "memory": 256
+      "maxDuration": 15
     }
   },
   "rewrites": [

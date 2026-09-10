@@ -4,7 +4,7 @@
   "description": "Manarize — Sri Lanka's premium e-commerce platform",
   "private": true,
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "scripts": {
     "build": "node build.js",
