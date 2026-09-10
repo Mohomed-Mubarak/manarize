@@ -27,10 +27,6 @@
       "maxDuration": 15,
       "memory": 256
     },
-    "api/admin/auth.js": {
-      "maxDuration": 10,
-      "memory": 256
-    },
     "api/auth/session.js": {
       "maxDuration": 10,
       "memory": 128
@@ -39,25 +35,9 @@
       "maxDuration": 10,
       "memory": 128
     },
-    "api/admin/upload.js": {
+    "api/admin/[...action].js": {
       "maxDuration": 30,
       "memory": 512
-    },
-    "api/admin/orders.js": {
-      "maxDuration": 20,
-      "memory": 256
-    },
-    "api/admin/products.js": {
-      "maxDuration": 15,
-      "memory": 256
-    },
-    "api/admin/users.js": {
-      "maxDuration": 15,
-      "memory": 256
-    },
-    "api/admin/reviews.js": {
-      "maxDuration": 10,
-      "memory": 256
     },
     "api/**/*.js": {
       "maxDuration": 15,

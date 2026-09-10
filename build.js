@@ -73,18 +73,18 @@ const unfilled = PLACEHOLDER_VARS.filter(k => {
   return v && PLACEHOLDER_PATTERNS.some(re => re.test(v));
 });
 if (unfilled.length > 0) {
-  console.log('[build] ───────────────────────────────────────────────────────────');
-  console.log('[build] NOTE: optional integrations not yet configured:');
-  unfilled.forEach(k => console.log(`[build]   ${k}=${get(k)}`));
-  console.log('[build]');
-  console.log('[build] Site builds and runs fine without these. They only gate:');
-  if (unfilled.some(k => k.startsWith('PAYHERE')))    console.log('[build]   💳  Real PayHere payments (checkout runs in simulated mode until set)');
-  if (unfilled.some(k => k.startsWith('EMAILJS')))    console.log('[build]   📧  Contact-form email delivery (messages still save to the admin panel)');
-  if (unfilled.some(k => k === 'SITE_URL'))           console.log('[build]   🔐  Cross-origin API/webhook calls (same-origin site usage is unaffected)');
-  console.log('[build]');
-  console.log('[build] Add real values in Vercel Environment Variables when ready.');
-  console.log('[build] ───────────────────────────────────────────────────────────');
-  // Informational only — never blocks build or deploy.
+  console.error('[build] ───────────────────────────────────────────────────────────');
+  console.error('[build] ERROR: The following .env values are still placeholders:');
+  unfilled.forEach(k => console.error(`[build]   ${k}=${get(k)}`));
+  console.error('[build]');
+  console.error('[build] These placeholder values will break:');
+  if (unfilled.some(k => k.startsWith('PAYHERE')))    console.error('[build]   💳  Payments  — PayHere checkout will fail');
+  if (unfilled.some(k => k.startsWith('EMAILJS')))    console.error('[build]   📧  Email     — Contact form emails will not send');
+  if (unfilled.some(k => k === 'SITE_URL'))           console.error('[build]   🔐  Login     — OAuth redirects and IPN callbacks will fail');
+  console.error('[build]');
+  console.warn('[build] Fix: set real values in Vercel Environment Variables.');
+  console.warn('[build] ───────────────────────────────────────────────────────────');
+  // Warning only — do not exit. Set real values in Vercel dashboard.
 }
 
 // ── 4. PUBLIC vars only — never put secrets in browser bundle ─────
