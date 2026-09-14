@@ -19,7 +19,7 @@
 #page-loader {
   position: fixed; inset: 0;
   background: #0d0f14;          /* dark-mode default */
-  z-index: var(--z-loader);
+  z-index: var(--z-loader, 9999); /* fallback: variables.css loads deferred */
   display: flex; align-items: center; justify-content: center;
   flex-direction: column; gap: 1.5rem;
   transition: opacity .3s, visibility .3s;
@@ -56,7 +56,7 @@
 #page-progress {
   position: fixed; top: 0; left: 0;
   height: 2px; background: #c9a84c;
-  z-index: var(--z-progress); width: 0;
+  z-index: var(--z-progress, 10000); width: 0;
   transition: width .3s ease;
 }
 #page-progress.active { animation: _ldrProgress 1.5s ease-out forwards; }
