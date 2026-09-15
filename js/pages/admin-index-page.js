@@ -31,8 +31,25 @@ import { withLoader } from '../../js/loader.js';
 
         if (!result.success) {
           setLoginError(result.error || 'Invalid credentials.');
-          btn.disabled = false;
-          btn.innerHTML = '<i class="fa-solid fa-lock"></i> Sign In to Admin';
+          const isRateLimited = /too many|wait 60/i.test(result.error || '');
+          if (isRateLimited) {
+            // Lock the button for 60s so retries can't stack more 429s.
+            let secs = 60;
+            btn.disabled = true;
+            const tick = () => {
+              btn.innerHTML = `<i class="fa-solid fa-clock"></i> Try again in ${secs}s`;
+              if (secs-- <= 0) {
+                clearInterval(timer);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-lock"></i> Sign In to Admin';
+              }
+            };
+            tick();
+            const timer = setInterval(tick, 1000);
+          } else {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-lock"></i> Sign In to Admin';
+          }
           return;
         }
 

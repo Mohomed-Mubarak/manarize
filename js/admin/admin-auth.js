@@ -229,6 +229,8 @@ export async function adminLogin(email, password) {
   const redirectTo = `${window.location.origin}/admin/dashboard`;
 
   // Retry once after a brief pause — helps with transient Supabase OTP errors.
+  // Never retry a rate-limit error: doing so just burns a 2nd quota slot
+  // and guarantees a 2nd 429, making the lockout worse.
   let magicError = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     const { error } = await sb.auth.signInWithOtp({
@@ -240,6 +242,9 @@ export async function adminLogin(email, password) {
     });
     magicError = error;
     if (!error) break;
+    const isRateLimit = error.status === 429 ||
+      (error.message || '').toLowerCase().includes('rate');
+    if (isRateLimit) break;
     if (attempt === 0) await new Promise(r => setTimeout(r, 1200));
   }
 
