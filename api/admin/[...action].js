@@ -49,11 +49,19 @@ const routes = {
 module.exports = async function handler(req, res) {
   // req.query.action is normally an array (e.g. ['users']) supplied by
   // Vercel's [...action] catch-all matching. Some edge/proxy configs can
-  // deliver it as a single string or a "users/" value with a trailing
-  // slash — normalise defensively so a stray slash or casing difference
-  // never falls through to a false 404.
+  // deliver it as a single string, a "users/" value with a trailing
+  // slash, or drop it from req.query entirely — normalise defensively,
+  // and fall back to parsing req.url directly, so a stray slash, casing
+  // difference, or missing query param never falls through to a false 404.
   const raw = req.query.action;
-  const segments = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+  let segments = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+
+  if (!segments.length && req.url) {
+    const pathname = req.url.split('?')[0];
+    const afterAdmin = pathname.replace(/^\/?api\/admin\/?/i, '');
+    segments = afterAdmin.split('/').filter(Boolean);
+  }
+
   const route = String(segments[0] || '').trim().toLowerCase().replace(/\/+$/, '');
 
   const loader = routes[route];
