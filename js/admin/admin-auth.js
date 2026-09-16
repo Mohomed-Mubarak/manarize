@@ -1,11 +1,8 @@
 /* ============================================================
-   ZENMARKET — ADMIN AUTH  (v4 — Inactivity timeout + sessionStorage)
+   ZENMARKET — ADMIN AUTH  (v5 — Supabase-only, role-based)
    ============================================================
-   Auth strategy:
-   ┌─ Hardcoded ADMIN_EMAIL (env / demo mode)
-   │   └─ hash-based password check → direct session
-   │
-   └─ Supabase users with profiles.role = 'admin'
+   Auth strategy (Supabase users with profiles.role = 'admin' only —
+   no .env-based admin account):
        1. signInWithPassword  → verify credentials
        2. check profiles.role = 'admin' + active = true
        3. signInWithOtp (magic link) → email redirect to /admin/dashboard
@@ -15,36 +12,13 @@
    Inactivity TTL  : 5 minutes of no mouse / keyboard / touch activity
    Absolute TTL    : 8 hours (hard ceiling regardless of activity)
    ============================================================ */
-import { LS, ADMIN_EMAIL, ADMIN_PASSWORD } from '../config.js';
+import { LS } from '../config.js';
 import { setAdminToken, clearAdminToken } from '../admin-api.js';
 import {
-  hashPassword, verifyPassword,
   checkBruteForce, recordFailedAttempt, clearFailedAttempts,
 } from '../security-utils.js';
 import { getSupabase } from '../supabase.js';
 import { registerDevice } from '../auth.js';
-
-const PW_KEY = 'zm_admin_password_hash';
-
-// ── Legacy password hash (env-admin only) ─────────────────────
-async function getActivePasswordHash() {
-  try {
-    const res = await fetch('/api/admin/config?key=password_hash');
-    if (res.ok) {
-      const { value } = await res.json();
-      if (value) { sessionStorage.setItem(PW_KEY, value); return value; }
-    }
-  } catch { /* offline */ }
-
-  try {
-    const cached = sessionStorage.getItem(PW_KEY);
-    if (cached) return cached;
-    if (!ADMIN_PASSWORD) return null;
-    const h = await hashPassword(ADMIN_PASSWORD);
-    sessionStorage.setItem(PW_KEY, h);
-    return h;
-  } catch { return null; }
-}
 
 const SESSION_TTL_MS    = 8 * 60 * 60 * 1000; // 8-hour hard ceiling
 const INACTIVITY_TTL_MS = 5 * 60 * 1000;       // 5-minute inactivity timeout
@@ -131,43 +105,12 @@ export function getAdminSession() {
   catch { return null; }
 }
 
-// ── Login (Step 1 — email + password) ─────────────────────────
+// ── Login (Step 1 — email + password, Supabase-only) ──────────
 export async function adminLogin(email, password) {
   const lockout = checkBruteForce();
   if (lockout) return { success: false, error: lockout };
 
-  // ── A) Legacy env-admin ───────────────────────────────────────
-  if (email === ADMIN_EMAIL) {
-    const activeHash = await getActivePasswordHash();
-    const { match } = await verifyPassword(password, activeHash);
-    if (!match) {
-      recordFailedAttempt();
-      return { success: false, error: 'Invalid credentials' };
-    }
-    clearFailedAttempts();
-
-    // Get a real server-issued HMAC token (fixes HIGH-1)
-    try {
-      const tokenRes = await fetch('/api/admin/auth', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ email, password }),
-      });
-      if (tokenRes.ok) {
-        const { token } = await tokenRes.json();
-        if (token) setAdminToken(token);
-      }
-    } catch (e) {
-      console.warn('[AdminAuth] Could not fetch server token:', e.message);
-    }
-
-    const session = { email, role: 'admin', name: 'Admin User', loginAt: Date.now() };
-    sessionStorage.setItem(LS.adminSession, JSON.stringify(session));
-    startAdminInactivityTimer();
-    return { success: true, session };
-  }
-
-  // ── B) Supabase multi-admin with magic link ───────────────────
+  // ── Supabase multi-admin with magic link ───────────────────
   const sb = getSupabase();
   if (!sb) {
     recordFailedAttempt();
@@ -403,32 +346,27 @@ export function adminLogout() {
   window.location.href = '/';
 }
 
-// ── Change password (legacy admin only) ──────────────────────
+// ── Change password (Supabase admin users) ────────────────────
 export async function changeAdminPassword(currentPw, newPw) {
   if (!currentPw || !newPw) return { success: false, error: 'All fields are required.' };
   if (newPw.length < 8)     return { success: false, error: 'New password must be at least 8 characters.' };
   if (newPw === currentPw)  return { success: false, error: 'New password must be different from current.' };
 
-  const activeHash = await getActivePasswordHash();
-  const { match } = await verifyPassword(currentPw, activeHash);
-  if (!match) return { success: false, error: 'Current password is incorrect.' };
+  const sb = getSupabase();
+  if (!sb) return { success: false, error: 'Not connected to authentication service.' };
 
-  const newHash = await hashPassword(newPw);
-  try {
-    const res = await fetch('/api/admin/config', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ key: 'password_hash', currentPassword: currentPw, newValue: newHash }),
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok && res.status !== 0 && res.status < 500) {
-      return { success: false, error: json.error || 'Failed to save password.' };
-    }
-  } catch {
-    console.warn('[Manarize] Admin config API unavailable — saving to localStorage only.');
-  }
+  const session = getAdminSession();
+  if (!session?.email) return { success: false, error: 'No admin session — please log in again.' };
 
-  sessionStorage.setItem(PW_KEY, newHash);
+  // Re-verify the current password before allowing a change.
+  const { error: reauthError } = await sb.auth.signInWithPassword({
+    email: session.email, password: currentPw,
+  });
+  if (reauthError) return { success: false, error: 'Current password is incorrect.' };
+
+  const { error: updateError } = await sb.auth.updateUser({ password: newPw });
+  if (updateError) return { success: false, error: updateError.message || 'Failed to update password.' };
+
   sessionStorage.removeItem(LS.adminSession);
   clearAdminToken();
   return { success: true };

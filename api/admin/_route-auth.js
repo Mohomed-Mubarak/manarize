@@ -14,7 +14,6 @@
    Also fixes CRIT-3: server-side brute-force tracking by IP.
    ============================================================ */
 
-const crypto              = require('crypto');
 const { createClient }    = require('@supabase/supabase-js');
 const { issueHmacToken }  = require('./_auth');
 
@@ -66,28 +65,6 @@ async function _recordFailure(key) {
 // Clear by inserting a reset entry — handled by window expiry naturally.
 // We use a no-op here; the window will expire on its own.
 async function _clearBf(_key) { /* window-based expiry in Supabase */ }
-
-// ── PBKDF2 password verify (mirrors security-utils.js) ───────────
-const PBKDF2_PREFIX = 'pbkdf2:';
-const PBKDF2_ITERS  = 310_000;
-
-async function verifyPbkdf2(plain, stored) {
-  if (!plain || !stored) return false;
-  if (!stored.startsWith(PBKDF2_PREFIX)) return false;
-  const parts = stored.slice(PBKDF2_PREFIX.length).split(':');
-  if (parts.length !== 2) return false;
-  const saltHex = parts[0];
-  const hashHex = parts[1];
-  const salt    = Buffer.from(saltHex, 'hex');
-  const derived = await new Promise((resolve, reject) =>
-    crypto.pbkdf2(plain, salt, PBKDF2_ITERS, 32, 'sha256', (err, key) =>
-      err ? reject(err) : resolve(key)
-    )
-  );
-  const expected = Buffer.from(hashHex, 'hex');
-  if (derived.length !== expected.length) return false;
-  return crypto.timingSafeEqual(derived, expected);
-}
 
 async function readJson(req) {
   return new Promise((resolve, reject) => {
@@ -164,38 +141,7 @@ module.exports = async function handler(req, res) {
     return res.status(429).json({ error: 'Too many failed attempts. Try again in 15 minutes.' });
   }
 
-  const adminEmail = (process.env.ADMIN_EMAIL || '').toLowerCase();
-  let verified = false;
-
-  // ── A) Env-admin (legacy) ─────────────────────────────────────
-  if (email === adminEmail) {
-    const storedHash = process.env.ADMIN_PASSWORD_HASH || '';
-    if (!storedHash) {
-      // Env var not set — fail securely
-      console.error('[admin/auth] ADMIN_PASSWORD_HASH env var not set');
-      return res.status(503).json({ error: 'Admin authentication not configured' });
-    }
-    verified = await verifyPbkdf2(password, storedHash);
-
-    if (!verified) {
-      await _recordFailure(ipKey);
-      await _recordFailure(emailKey);
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    await _clearBf(ipKey);
-    await _clearBf(emailKey);
-
-    try {
-      const token = issueHmacToken(email);
-      return res.status(200).json({ token });
-    } catch (err) {
-      console.error('[admin/auth] issueHmacToken error:', err.message);
-      return res.status(500).json({ error: 'Failed to issue session token' });
-    }
-  }
-
-  // ── B) Supabase multi-admin ───────────────────────────────────
+  // ── Supabase multi-admin ────────────────────────────────────────
   const sbUrl = process.env.SUPABASE_URL;
   const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
