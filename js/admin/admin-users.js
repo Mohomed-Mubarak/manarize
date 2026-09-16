@@ -12,11 +12,13 @@ import toast from '../toast.js';
 import { esc } from '../security-utils.js';
 
 let allUsers = [];
+let loadFailed = false; // true only when the fetch itself errored — distinct from a real empty list
 
 // ── Supabase helpers ──────────────────────────────────────────
 async function fetchUsersFromSupabase() {
   const sb = getSupabase();
   if (!sb) {
+    loadFailed = true;
     toast.error('Error', 'Supabase is not configured');
     return [];
   }
@@ -25,10 +27,12 @@ async function fetchUsersFromSupabase() {
   // and ALL profile rows are returned — not just the current user's.
   try {
     const result = await AdminAPI.users.list();
+    loadFailed = false;
     return result.users || [];
   } catch (err) {
     console.error('[AdminUsers] API fetch error:', err);
-    toast.error('Error', 'Failed to load users from database');
+    loadFailed = true;
+    toast.error('Error', err.message || 'Failed to load users from database');
     return [];
   }
 }
@@ -80,7 +84,14 @@ function renderTable(filter = '') {
   if (countEl) countEl.textContent = `${allUsers.length} users`;
 
   if (!shown.length) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--clr-text-3)">No users found</td></tr>`;
+    tbody.innerHTML = loadFailed
+      ? `<tr><td colspan="8" style="text-align:center;padding:2.5rem 1rem">
+           <i class="fa-solid fa-triangle-exclamation" style="color:var(--clr-error);font-size:1.25rem"></i>
+           <div style="color:var(--clr-text-2);margin:.5rem 0 1rem">Couldn't load users. Check your connection and try again.</div>
+           <button class="btn btn-ghost btn-sm" id="retry-users-btn"><i class="fa-solid fa-rotate-right"></i> Retry</button>
+         </td></tr>`
+      : `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--clr-text-3)">No users found</td></tr>`;
+    document.getElementById('retry-users-btn')?.addEventListener('click', loadUsers);
     return;
   }
 
@@ -393,6 +404,48 @@ function openAddModal() {
   });
 }
 
+// ── Skeleton loading state ───────────────────────────────────
+// Shown immediately (before the network round-trip resolves) so the
+// page never sits on a blank shell or a stale "0" — replaced in place
+// by renderStats()/renderTable() once real data (or an error) arrives.
+function renderStatsSkeleton() {
+  const statsEl = document.getElementById('user-stats');
+  if (!statsEl) return;
+  statsEl.innerHTML = Array.from({ length: 4 }).map(() => `
+    <div class="kpi-card">
+      <div class="skeleton skeleton-icon"></div>
+      <div class="skeleton skeleton-line" style="width:60%;height:.7rem;margin-top:.75rem"></div>
+      <div class="skeleton skeleton-line" style="width:40%;height:1.5rem;margin-top:.5rem"></div>
+    </div>`).join('');
+}
+
+function renderTableSkeleton() {
+  const tbody = document.getElementById('users-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = Array.from({ length: 6 }).map(() => `
+    <tr>
+      <td><div style="display:flex;align-items:center;gap:.75rem">
+        <div class="skeleton skeleton-avatar"></div>
+        <div style="flex:1"><div class="skeleton skeleton-line" style="width:70%"></div></div>
+      </div></td>
+      <td><div class="skeleton skeleton-line" style="width:85%"></div></td>
+      <td><div class="skeleton skeleton-line" style="width:60%"></div></td>
+      <td><div class="skeleton skeleton-line" style="width:50px"></div></td>
+      <td><div class="skeleton skeleton-line" style="width:60px"></div></td>
+      <td><div class="skeleton skeleton-line" style="width:30px"></div></td>
+      <td><div class="skeleton skeleton-line" style="width:55px"></div></td>
+      <td><div class="skeleton skeleton-line" style="width:70px"></div></td>
+    </tr>`).join('');
+}
+
+// ── Load (and reload) users ──────────────────────────────────
+async function loadUsers() {
+  renderTableSkeleton();
+  allUsers = await fetchUsersFromSupabase();
+  renderStats();
+  renderTable(document.getElementById('user-search')?.value.toLowerCase() || '');
+}
+
 // ── Stats cards ───────────────────────────────────────────────
 function renderStats() {
   const customers = allUsers.filter(u => u.role === 'customer').length;
@@ -425,17 +478,22 @@ function renderStats() {
 }
 
 // ── Init ──────────────────────────────────────────────────────
+// The full-page loader only covers layout injection — it's gone almost
+// instantly. The stat cards and table then show a shimmering skeleton
+// while users load in the background, so the page never flashes a
+// misleading "0" before the real numbers (or an error) are in.
 withLoader(async () => {
   if (!requireAdmin()) return;
   await injectAdminLayout('Users');
 
-  allUsers = await fetchUsersFromSupabase();
-  renderStats();
-  renderTable();
+  renderStatsSkeleton();
+  renderTableSkeleton();
 
   document.getElementById('user-search')?.addEventListener('input', e => {
     renderTable(e.target.value.toLowerCase());
   });
 
   document.getElementById('add-user-btn')?.addEventListener('click', openAddModal);
+
+  loadUsers();
 });

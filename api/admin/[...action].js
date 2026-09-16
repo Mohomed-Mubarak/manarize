@@ -47,12 +47,18 @@ const routes = {
 };
 
 module.exports = async function handler(req, res) {
+  // req.query.action is normally an array (e.g. ['users']) supplied by
+  // Vercel's [...action] catch-all matching. Some edge/proxy configs can
+  // deliver it as a single string or a "users/" value with a trailing
+  // slash — normalise defensively so a stray slash or casing difference
+  // never falls through to a false 404.
   const raw = req.query.action;
   const segments = Array.isArray(raw) ? raw : (raw ? [raw] : []);
-  const route = segments[0];
+  const route = String(segments[0] || '').trim().toLowerCase().replace(/\/+$/, '');
 
   const loader = routes[route];
   if (!loader) {
+    console.warn(`[admin router] No route for "${route}" (raw action: ${JSON.stringify(raw)}). Known routes: ${Object.keys(routes).join(', ')}`);
     return res.status(404).json({ error: 'Not found' });
   }
 
