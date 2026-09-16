@@ -26,8 +26,14 @@ import { getAllReviewsFlat, approveReview, rejectReview } from '../reviews.js';
 import { sendReviewApprovedNotification } from '../notifications.js';
 
 withLoader(async () => {
-  // Handle Supabase magic link redirect (hash contains access_token)
-  if (window.location.hash.includes('access_token')) {
+  // Handle a Supabase magic-link redirect landing here — either the legacy
+  // implicit-flow hash (#access_token=...) or the PKCE query param
+  // (?code=...) that supabase-js v2 uses by default. Missing the PKCE case
+  // silently sent admins to the homepage instead of the dashboard, since
+  // requireAdmin() below found no session yet and bounced them to '/'.
+  const _hasMagicLinkParams = window.location.hash.includes('access_token') ||
+    new URLSearchParams(window.location.search).has('code');
+  if (_hasMagicLinkParams) {
     await handleMagicLinkCallback();
   }
   if (!requireAdmin()) return;

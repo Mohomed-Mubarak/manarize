@@ -211,16 +211,20 @@ export async function adminLogin(email, password) {
 }
 
 // ── Magic Link Callback (called on dashboard.html load) ───────
-// Processes the Supabase hash fragment set by the magic link redirect.
-// Returns true if a valid admin session was established.
+// Processes the Supabase redirect set by the magic link — either the
+// legacy hash fragment (#access_token=...) or the PKCE ?code=... query
+// param (the supabase-js v2 default). Returns true if a valid admin
+// session was established.
 export async function handleMagicLinkCallback() {
-  const hash = window.location.hash;
-  if (!hash || !hash.includes('access_token')) return false;
+  const hash      = window.location.hash;
+  const codeParam = new URLSearchParams(window.location.search).get('code');
+  if (!(hash && hash.includes('access_token')) && !codeParam) return false;
 
   const sb = getSupabase();
   if (!sb) return false;
 
-  // Supabase v2 auto-detects the hash — wait for SIGNED_IN event
+  // Attach the listener BEFORE triggering the exchange below, so we can't
+  // miss the SIGNED_IN event it fires.
   return new Promise((resolve) => {
     let resolved = false;
     const done = (val) => {
@@ -306,14 +310,24 @@ export async function handleMagicLinkCallback() {
       // page on the same browser won't be asked for another magic link.
       try { registerDevice(session.user.id); } catch (_) { /* non-fatal */ }
 
-      // Clean URL — remove hash so back/reload won't re-trigger
-      history.replaceState(null, '', window.location.pathname + window.location.search);
+      // Clean URL — remove hash/code so back/reload won't re-trigger
+      history.replaceState(null, '', window.location.pathname);
 
       // Start inactivity tracking after magic-link login
       startAdminInactivityTimer();
 
       done(true);
     });
+
+    // Trigger the SIGNED_IN event above. detectSessionInUrl only
+    // auto-parses the legacy #access_token hash; the PKCE ?code= form
+    // must be exchanged explicitly.
+    if (codeParam) {
+      sb.auth.exchangeCodeForSession(codeParam).catch((err) => {
+        console.warn('[AdminAuth] PKCE code exchange failed:', err.message);
+        done(false);
+      });
+    }
   });
 }
 
