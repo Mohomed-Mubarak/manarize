@@ -120,6 +120,7 @@ export async function adminLogin(email, password) {
   // Step 1: verify password via Supabase Auth
   const { data: authData, error: authError } = await sb.auth.signInWithPassword({ email, password });
   if (authError || !authData?.user) {
+    console.error('[AdminAuth] signInWithPassword failed:', authError?.message || authError);
     recordFailedAttempt();
     return { success: false, error: 'Invalid credentials' };
   }
@@ -148,6 +149,7 @@ export async function adminLogin(email, password) {
       .eq('id', authData.user.id)
       .single();
     if (profileError || !p) {
+      console.error('[AdminAuth] profiles lookup failed:', profileError?.message || 'no row for this user id');
       await sb.auth.signOut();
       recordFailedAttempt();
       return { success: false, error: 'Invalid credentials' };
@@ -156,6 +158,7 @@ export async function adminLogin(email, password) {
   }
 
   if (profile.role !== 'admin') {
+    console.error('[AdminAuth] profiles.role is', JSON.stringify(profile.role), '— expected "admin"');
     await sb.auth.signOut();
     recordFailedAttempt();
     return { success: false, error: 'Access denied. Admin privileges required.' };
