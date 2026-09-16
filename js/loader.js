@@ -9,20 +9,34 @@ export function showLoader() {
   if (bar)    { bar.classList.add('active'); bar.classList.remove('done'); }
 }
 
+// ── Wait for deferred CSS (set by defer-styles.js) ─────────────
+// Prevents revealing a half-styled page on a slow connection: the
+// loader stays up until every deferred stylesheet has actually
+// finished loading, not just until the page JS is done.
+function waitForStyles(maxMs) {
+  if (window.__stylesReady) return Promise.resolve();
+  return new Promise(resolve => {
+    window.addEventListener('styles:ready', resolve, { once: true });
+    setTimeout(resolve, maxMs); // never block forever on a stuck stylesheet
+  });
+}
+
 export function hideLoader() {
-  const loader = document.getElementById('page-loader');
-  const bar    = document.getElementById('page-progress');
-  if (loader) {
-    // Small delay so content is painted before loader disappears
-    setTimeout(() => loader.classList.add('hidden'), 200);
-  }
-  if (bar) {
-    bar.classList.add('done');
-    setTimeout(() => {
-      bar.classList.remove('active', 'done');
-      bar.style.width = '0';
-    }, 500);
-  }
+  waitForStyles(4000).then(() => {
+    const loader = document.getElementById('page-loader');
+    const bar    = document.getElementById('page-progress');
+    if (loader) {
+      // Small delay so content is painted before loader disappears
+      setTimeout(() => loader.classList.add('hidden'), 200);
+    }
+    if (bar) {
+      bar.classList.add('done');
+      setTimeout(() => {
+        bar.classList.remove('active', 'done');
+        bar.style.width = '0';
+      }, 500);
+    }
+  });
 }
 
 /**
@@ -33,9 +47,11 @@ export async function withLoader(fn) {
   // Ensure loader is visible immediately
   showLoader();
 
-  // Safety net: always dismiss loader after 3s max
-  // so the page is NEVER left on a black screen
-  const safetyTimer = setTimeout(() => hideLoader(), 3000);
+  // Safety net: always dismiss loader after 8s max (hideLoader() itself
+  // still waits up to another 4s for CSS on top of this) so the page is
+  // NEVER left on a black screen — but slow connections get a real chance
+  // to finish loading first instead of flashing unstyled content.
+  const safetyTimer = setTimeout(() => hideLoader(), 8000);
 
   try {
     await fn();

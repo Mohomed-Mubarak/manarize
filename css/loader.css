@@ -23,7 +23,7 @@
   display: flex; align-items: center; justify-content: center;
   flex-direction: column; gap: 1.5rem;
   transition: opacity .3s, visibility .3s;
-  animation: _ldrTimeout 0s 3s forwards; /* auto-dismiss after 3 s */
+  animation: _ldrTimeout 0s 12s forwards; /* last-resort auto-dismiss if JS never runs at all */
 }
 [data-theme="light"] #page-loader { background: #f4f5f9; }
 [data-theme="warm"]  #page-loader { background: #0f0c07; }
