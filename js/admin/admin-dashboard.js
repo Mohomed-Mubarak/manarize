@@ -52,34 +52,42 @@ withLoader(async () => {
         createdAt: row.created_at, updatedAt: row.updated_at,
       });
       // Direct Supabase (anon SELECT policy — works on localhost and Vercel)
+      let sbErr = null;
       try {
         const sb = getSupabase();
         if (!sb) throw new Error('no client');
         const { data, error } = await sb.from('orders').select('*').order('created_at', { ascending: false });
         if (error) throw new Error(error.message);
         return (data || []).map(mapO);
-      } catch (_) {}
+      } catch (e) { sbErr = e; }
       // AdminAPI fallback (Vercel serverless with service role)
       try {
         const r = await AdminAPI.orders.list({ limit: 500 });
         return (r.data || []).map(mapO);
-      } catch (_) { return []; }
+      } catch (e) {
+        console.error('[Dashboard] orders failed — Supabase:', sbErr?.message, '| AdminAPI:', e.message);
+        return [];
+      }
     })(),
     getProducts({ adminMode: true }).catch(e => { console.warn('getProducts failed:', e); return []; }),
     // Users: try AdminAPI first (service role, bypasses RLS), then direct Supabase query
     (async () => {
+      let apiErr = null;
       try {
         const r = await AdminAPI.users.list();
         if (r.users && r.users.length > 0) return r.users;
-      } catch (_) {}
+      } catch (e) { apiErr = e; }
       // Direct Supabase fallback (may be limited by RLS to own profile only)
       try {
         const sb = getSupabase();
         if (sb) {
-          const { data } = await sb.from('profiles').select('id,name,email,role,active,created_at');
+          const { data, error } = await sb.from('profiles').select('id,name,email,role,active,created_at');
+          if (error) throw new Error(error.message);
           if (data && data.length > 0) return data;
         }
-      } catch (_) {}
+      } catch (e) {
+        console.error('[Dashboard] users failed — AdminAPI:', apiErr?.message, '| Supabase:', e.message);
+      }
       return [];
     })(),
   ]);
